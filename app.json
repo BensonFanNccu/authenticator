@@ -1,26 +1,37 @@
 {
   "expo": {
     "name": "Authenticator",
-    "slug": "Authenticator",
+    "slug": "authenticator",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "authenticator",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.benson.authenticator",
+      "icon": "./assets/expo.icon",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "com.benson.authenticator",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
-      "output": "server",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -32,11 +43,42 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "允許 $(PRODUCT_NAME) 使用 Face ID 保護你的驗證碼。"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允許 $(PRODUCT_NAME) 使用相機掃描兩步驟驗證的 QR Code。",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允許 $(PRODUCT_NAME) 讀取相片，以便從截圖匯入 QR Code。",
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "8376d3ad-b2de-49c6-8071-14f97a8c975a"
+      }
     }
   }
 }

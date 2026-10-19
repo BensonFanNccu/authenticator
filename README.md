@@ -1,56 +1,75 @@
-# Welcome to your Expo app 👋
+# Authenticator
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+掃描 QR Code 產生兩步驟驗證碼的手機 App（TOTP / HOTP），用 Expo + React Native 製作，相容 Google Authenticator、Microsoft Authenticator 等使用的標準格式。
 
-## Get started
+## 功能
 
-1. Install dependencies
+- 用相機掃描 `otpauth://` QR Code 新增帳號
+- 從相簿的截圖匯入 QR Code（在同一支手機上設定時很方便）
+- 手動輸入金鑰，可調整演算法（SHA-1 / SHA-256 / SHA-512）、位數（6–8）、週期
+- 匯入 Google Authenticator「匯出帳戶」的 `otpauth-migration://` QR Code，一次轉移多個帳號
+- 支援 HOTP（依計數器），按鈕產生下一組
+- 點一下複製驗證碼（Android 13+ 標記為敏感內容，不會在剪貼簿預覽中顯示）
+- 長按編輯名稱或刪除
+- 同一金鑰重複加入時自動略過
+
+## 在手機上執行
+
+1. 手機安裝 **Expo Go**（App Store / Google Play）
+2. 電腦上執行：
 
    ```bash
    npm install
-   ```
-
-2. Start the app
-
-   ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. 用手機掃描終端機顯示的 QR Code（iPhone 用相機 App，Android 用 Expo Go）。手機和電腦需在同一個網路；不同網路時改用 `npx expo start --tunnel`。
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+`npx expo start --web` 可以在瀏覽器預覽介面，但 **web 版的資料以未加密的 localStorage 儲存，只供開發預覽，不要放真正的金鑰**。
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 打包成 APK（Android）
 
-## Get a fresh project
+用 Expo 的雲端建置服務 EAS Build，電腦不需要安裝 Android Studio。
 
-When you're ready, run:
+1. 到 [expo.dev](https://expo.dev/signup) 註冊免費帳號
+2. 登入並建置：
+
+   ```bash
+   npx eas-cli@latest login
+   npm run build:apk
+   ```
+
+   第一次會詢問是否建立 EAS 專案、是否產生 Android 簽章金鑰（Keystore），都選 **Yes**。金鑰由 EAS 保管，之後更新版本會用同一把簽章，才能直接覆蓋安裝。
+
+3. 建置完成後終端機會顯示下載連結與 QR Code，用手機開啟下載 APK，允許「安裝未知來源的應用程式」後即可安裝。
+
+設定在 `eas.json` 的 `preview` profile（輸出 APK）。上架 Google Play 用 `production` profile，會輸出 AAB。
+
+套件名稱是 `com.benson.authenticator`（在 `app.json`），**第一次上架後就不能改**，要改請在上架前改。
+
+iOS 需要 Apple Developer 帳號（年費），用 `npx eas-cli@latest build --platform ios`。
+
+## 安全性
+
+- 金鑰存在 iOS Keychain / Android Keystore（`expo-secure-store`），由系統加密，不會上傳。
+- 驗證碼完全在手機上計算，App 不需要網路。
+- Android 的 Keystore 資料不會隨系統備份還原，**換手機前請先在各服務設定好備用驗證方式或備援碼**。
+
+## 開發
 
 ```bash
-npm run reset-project
+npm test            # 單元測試（RFC 4226 / 6238 官方測試向量、URI 與匯出格式解析）
+npm run typecheck   # TypeScript 型別檢查
+npx expo lint       # ESLint
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| 路徑 | 內容 |
+| --- | --- |
+| `src/lib/otp.ts` | HOTP / TOTP 演算法 |
+| `src/lib/base32.ts` | Base32 編解碼 |
+| `src/lib/otpauth.ts` | `otpauth://` 與 Google Authenticator 匯出格式解析 |
+| `src/lib/account.ts` | 帳號資料型別、驗證、驗證碼產生 |
+| `src/lib/vault.ts` | 帳號的安全儲存（每個帳號一筆 + 一筆排序索引） |
+| `src/providers/` | 帳號狀態、Toast 提示 |
+| `src/app/` | 畫面（Expo Router）：列表、新增、掃描、手動輸入、編輯 |
+| `test/` | 單元測試（Node 內建 test runner） |

@@ -1,98 +1,155 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
+import { Stack, useRouter } from 'expo-router';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { AccountRow } from '@/components/account-row';
+import { Button } from '@/components/button';
+import { Icon } from '@/components/icon';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useNow } from '@/hooks/use-now';
+import { useTheme } from '@/hooks/use-theme';
+import { formatCode, type Account } from '@/lib/account';
+import { useAccounts } from '@/providers/accounts';
+import { useToast } from '@/providers/toast';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
+export default function AccountsScreen() {
+  const theme = useTheme();
+  const router = useRouter();
+  const toast = useToast();
+  const now = useNow();
+  const { accounts, status, updateAccount } = useAccounts();
+
+  const copy = async (code: string) => {
+    await Clipboard.setStringAsync(code, { android: { isSensitive: true } });
+    Haptics.selectionAsync();
+    toast(`已複製 ${formatCode(code)}`);
+  };
+
+  const nextCode = (account: Account) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    updateAccount(account.id, { counter: account.counter + 1 }).catch(() => toast('更新失敗，請再試一次'));
+  };
+
+  const header = (
+    <Stack.Screen
+      options={{
+        headerRight: () => (
+          <Pressable
+            onPress={() => router.push('/add')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="新增帳號"
+            style={styles.headerButton}>
+            <Icon name="add" size={26} color={theme.tint} />
+          </Pressable>
+        ),
+      }}
+    />
+  );
+
+  if (status === 'loading') return header;
+
+  if (status === 'error') {
     return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
+      <View style={styles.centered}>
+        {header}
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>無法讀取帳號資料</Text>
+        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+          安全儲存區讀取失敗。為了避免覆蓋既有資料，目前暫停新增與修改，請重新開啟 App。
+        </Text>
+      </View>
     );
   }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+
+  if (accounts.length === 0) {
+    return (
+      <View style={styles.centered}>
+        {header}
+        <View style={[styles.emptyIcon, { backgroundColor: theme.card }]}>
+          <Icon name="shield" size={44} color={theme.tint} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: theme.text }]}>還沒有任何帳號</Text>
+        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+          在網站的「兩步驟驗證」設定中選擇驗證器 App，然後掃描它顯示的 QR Code。
+        </Text>
+        <View style={styles.emptyButton}>
+          <Button title="新增帳號" onPress={() => router.push('/add')} />
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
+    <>
+      {header}
+      <FlatList
+        data={accounts}
+        keyExtractor={(account) => account.id}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <View style={{ height: Spacing.two + 2 }} />}
+        renderItem={({ item }) => (
+          <AccountRow
+            account={item}
+            now={now}
+            onCopy={copy}
+            onEdit={() => router.push({ pathname: '/edit', params: { id: item.id } })}
+            onNextCode={() => nextCode(item)}
           />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        )}
+        ListFooterComponent={
+          <Text style={[styles.hint, { color: theme.textSecondary }]}>點一下複製驗證碼・長按編輯或刪除</Text>
+        }
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+  headerButton: {
+    paddingHorizontal: Spacing.one,
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+  list: {
+    padding: Spacing.three,
+    paddingBottom: Spacing.six,
+    width: '100%',
     maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
-  heroSection: {
+  hint: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: Spacing.four,
+  },
+  centered: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    padding: Spacing.five,
+    gap: Spacing.two,
   },
-  title: {
+  emptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.three,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  emptyText: {
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'center',
+    maxWidth: 320,
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  emptyButton: {
+    marginTop: Spacing.four,
+    width: '100%',
+    maxWidth: 320,
   },
 });
