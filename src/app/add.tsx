@@ -1,8 +1,8 @@
-import { scanFromURLAsync } from 'expo-camera';
+import { CameraView, scanFromURLAsync } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Section } from '@/components/form';
 import { Icon, type IconName } from '@/components/icon';
@@ -10,12 +10,51 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useImportCode } from '@/hooks/use-import-code';
 import { useTheme } from '@/hooks/use-theme';
 
+// On Android, prefer Google's code scanner: it's the Play services scanner many phones use for
+// their own QR scanning and needs no camera permission. The in-app camera is the fallback.
+// All ML Kit scanning depends on the expo-build-properties settings in app.json: R8 is off
+// because its full mode (AGP 9) strips ML Kit internals, and the Play Store <queries> entry
+// lets expo-camera detect Play services on Android 11+.
+const useSystemScanner = Platform.OS === 'android' && CameraView.isModernBarcodeScannerAvailable;
+
+/** "CODE: message", shown so a failure on a user's phone can be diagnosed from a screenshot. */
+const describeError = (error: unknown) =>
+  error instanceof Error
+    ? [(error as { code?: string }).code, error.message].filter(Boolean).join(': ')
+    : String(error);
+
+const isCancellation = (error: unknown) => /cancel/i.test(describeError(error));
+
 export default function AddScreen() {
   const theme = useTheme();
   const router = useRouter();
   const importCode = useImportCode();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const scan = async () => {
+    setError(null);
+    if (!useSystemScanner) {
+      router.push('/scan');
+      return;
+    }
+
+    const subscription = CameraView.onModernBarcodeScanned(async ({ data, raw }) => {
+      subscription.remove();
+      const result = await importCode(raw ?? data);
+      if (result.ok) router.dismissTo('/');
+      else setError(result.error);
+    });
+    try {
+      await CameraView.launchScanner({ barcodeTypes: ['qr'] });
+    } catch (e) {
+      subscription.remove();
+      if (isCancellation(e)) return;
+      // No Play services, or its scanner module isn't installed yet.
+      setError(`系統掃描器無法使用，已改用 App 內建相機（${describeError(e)}）`);
+      router.push('/scan');
+    }
+  };
 
   const pickImage = async () => {
     setError(null);
@@ -25,17 +64,19 @@ export default function AddScreen() {
     setBusy(true);
     try {
       const codes = await scanFromURLAsync(picked.assets[0].uri, ['qr']);
-      const code = codes.find((c) => /^otpauth/i.test(c.data)) ?? codes[0];
-      if (!code) {
+      // `raw` is the exact text in the code; Android's `data` is ML Kit's reformatted display value.
+      const texts = codes.map((c) => c.raw ?? c.data);
+      const text = texts.find((t) => /^otpauth/i.test(t)) ?? texts[0];
+      if (text === undefined) {
         setError('圖片中找不到 QR Code，請確認 QR Code 清楚且佔畫面大部分。');
         return;
       }
-      const result = await importCode(code.data);
+      const result = await importCode(text);
       if (result.ok) router.dismissTo('/');
       else setError(result.error);
     } catch (e) {
       console.error('Failed to scan image', e);
-      setError('無法讀取這張圖片');
+      setError(`無法讀取這張圖片（${describeError(e)}）`);
     } finally {
       setBusy(false);
     }
@@ -48,7 +89,7 @@ export default function AddScreen() {
           icon="scan"
           title="掃描 QR Code"
           subtitle="用相機掃描網站顯示的 QR Code"
-          onPress={() => router.push('/scan')}
+          onPress={scan}
         />
         <Option
           icon="photo"

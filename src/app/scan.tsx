@@ -22,7 +22,9 @@ export default function ScanScreen() {
   const handling = useRef(false);
   const rejected = useRef<string | null>(null);
 
-  const onScanned = async ({ data }: BarcodeScanningResult) => {
+  const onScanned = async ({ data: display, raw }: BarcodeScanningResult) => {
+    // `raw` is the exact text in the code; Android's `data` is ML Kit's reformatted display value.
+    const data = raw ?? display;
     if (handling.current || data === rejected.current) return;
     handling.current = true;
     const result = await importCode(data);

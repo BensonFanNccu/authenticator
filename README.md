@@ -73,3 +73,7 @@ npx expo lint       # ESLint
 | `src/providers/` | 帳號狀態、Toast 提示 |
 | `src/app/` | 畫面（Expo Router）：列表、新增、掃描、手動輸入、編輯 |
 | `test/` | 單元測試（Node 內建 test runner） |
+
+**不要移除 `app.json` 裡的 `expo-build-properties` 設定**：
+- `enableMinifyInReleaseBuilds: false`：AGP 9 預設的 R8 完整模式會刪掉 ML Kit 內部初始化需要的類別（[googlesamples/mlkit#1018](https://github.com/googlesamples/mlkit/issues/1018)），導致正式版的 QR 掃描與相片辨識全部失效，但開發模式（Expo Go）不會混淆，一切正常，很難察覺。
+- `manifestQueries` 宣告 `com.android.vending`：expo-camera 用查詢 Play 商店套件來判斷有沒有 Play 服務，Android 11 以上沒宣告就查不到。
